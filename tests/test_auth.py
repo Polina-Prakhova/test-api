@@ -1,5 +1,4 @@
-import json
-from typing import Dict, Any
+from typing import Any, Dict
 
 import pytest
 
@@ -57,14 +56,13 @@ def test_signup_with_existing_email_returns_400_and_message(http_session, url):
     assert body.get("detail") == "A user with this email address already exists."
 
 
-def test_signup_valid_payload_still_returns_400_due_to_controller_mismatch(http_session, url):
+def test_signup_valid_payload_returns_200_and_message(http_session, url):
     payload = _signup_payload()
 
     resp = http_session.post(url(f"{AUTH_PREFIX}/signup"), json=payload, timeout=10)
-    assert resp.status_code == 400, resp.text
+    assert resp.status_code == 200, resp.text
     body = resp.json()
-    # The router tries to build an incompatible response model producing a TypeError
-    assert "detail" in body and isinstance(body["detail"], str)
+    assert body.get("message") == "User signed up successfully."
 
 
 @pytest.mark.parametrize(
@@ -95,20 +93,28 @@ def test_signin_with_invalid_credentials_returns_401_and_message(http_session, u
     assert body.get("detail") == "Invalid user credentials."
 
 
-def test_signin_with_valid_credentials_still_returns_401_due_to_controller_mismatch(http_session, url):
+def test_signin_with_valid_credentials_returns_401_due_to_response_model_mismatch(
+    http_session, url
+):
     payload = _signin_payload(email="jhon_smith@example.com", password="Y2kjqKHX")
 
     resp = http_session.post(url(f"{AUTH_PREFIX}/signin"), json=payload, timeout=10)
     assert resp.status_code == 401, resp.text
     body = resp.json()
-    # The router builds wrong response model fields and raises error
+    # The router builds wrong response model fields; ensure it mentions missing accessToken
     assert "detail" in body and isinstance(body["detail"], str)
-    # Ensure it's not the invalid-credentials message
-    assert body["detail"] != "Invalid user credentials."
+    assert "accessToken" in body["detail"]
 
 
 def test_signin_wrong_http_method_returns_405(http_session, url):
     resp = http_session.get(url(f"{AUTH_PREFIX}/signin"), timeout=10)
+    assert resp.status_code == 405
+    data = resp.json()
+    assert data.get("detail") == "Method Not Allowed"
+
+
+def test_signup_wrong_http_method_returns_405(http_session, url):
+    resp = http_session.get(url(f"{AUTH_PREFIX}/signup"), timeout=10)
     assert resp.status_code == 405
     data = resp.json()
     assert data.get("detail") == "Method Not Allowed"
@@ -122,7 +128,19 @@ def test_signup_wrong_content_type_returns_422(http_session, url):
         headers={"Content-Type": "text/plain"},
         timeout=10,
     )
-    # FastAPI returns 422 for invalid body when JSON expected
+    # FastAPI may return 400/415/422 for invalid body when JSON expected
+    assert resp.status_code in {400, 415, 422}
+
+
+def test_signin_wrong_content_type_returns_422(http_session, url):
+    # Send text body instead of JSON
+    resp = http_session.post(
+        url(f"{AUTH_PREFIX}/signin"),
+        data="not a json",
+        headers={"Content-Type": "text/plain"},
+        timeout=10,
+    )
+    # FastAPI may return 400/415/422 for invalid body when JSON expected
     assert resp.status_code in {400, 415, 422}
 
 
