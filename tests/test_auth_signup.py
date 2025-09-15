@@ -9,10 +9,10 @@ class TestAuthSignup:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, dict)
-        # Response model SignUpSuccessResponse has only message
+        # Response model returns only a message field
+        assert set(data.keys()) == {"message"}
+        # Ensure message matches the backend service/router message
         assert data.get("message") == "User signed up successfully."
-        # Ensure no sensitive data leaked
-        assert "password" not in data
 
     def test_signup_existing_email_conflict(self, api, existing_email_signup_payload):
         resp = api.post(self.endpoint, json=existing_email_signup_payload)
@@ -25,7 +25,9 @@ class TestAuthSignup:
         "missing_field",
         ["firstName", "lastName", "email", "password"],
     )
-    def test_signup_missing_required_field(self, api, valid_signup_payload, missing_field):
+    def test_signup_missing_required_field(
+        self, api, valid_signup_payload, missing_field
+    ):
         payload = valid_signup_payload.copy()
         payload.pop(missing_field)
         resp = api.post(self.endpoint, json=payload)
@@ -33,7 +35,10 @@ class TestAuthSignup:
         data = resp.json()
         # FastAPI validation error structure
         assert "detail" in data
-        assert any(err.get("loc", [None, None])[-1] == missing_field for err in data["detail"])  # type: ignore[index]
+        assert any(
+            err.get("loc", [None, None])[-1] == missing_field
+            for err in data["detail"]  # type: ignore[index]
+        )
 
     @pytest.mark.parametrize(
         "field,value",
@@ -59,4 +64,5 @@ class TestAuthSignup:
         # Pydantic default extra is ignore -> still success
         assert resp.status_code == 200
         data = resp.json()
+        assert set(data.keys()) == {"message"}
         assert data.get("message") == "User signed up successfully."
