@@ -9,9 +9,27 @@ class TestAuthSignin:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, dict)
-        # Response model SignInResponse has accessToken, username, role in service
-        assert data.get("message") == "Sign in successful."
-        assert "accessToken" in data or "accessToken" in data.get("user", {})
+
+        def get_field(payload, field):
+            if isinstance(payload, dict) and field in payload:
+                return payload[field]
+            user = payload.get("user") if isinstance(payload, dict) else None
+            if isinstance(user, dict):
+                return user.get(field)
+            return None
+
+        access_token = get_field(data, "accessToken")
+        username = get_field(data, "username")
+        role = get_field(data, "role")
+
+        # Presence checks
+        assert access_token is not None, "accessToken is missing from response"
+        assert username is not None, "username is missing from response"
+        assert role is not None, "role is missing from response"
+
+        # Data integrity checks
+        assert isinstance(access_token, str) and access_token.strip() != "", "accessToken should be a non-empty string"
+        assert role == "CLIENT", f"Expected role 'CLIENT', got: {role}"
 
     def test_signin_invalid_credentials(self, api, invalid_signin_payload):
         resp = api.post(self.endpoint, json=invalid_signin_payload)
